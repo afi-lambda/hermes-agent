@@ -8346,6 +8346,19 @@ class AIAgent:
             )
 
             if orchestration_should_run(self, conversation_history):
+                # The parent session row is created lazily during the normal
+                # turn's persistence flush, which happens AFTER this prelude.
+                # Role children set parent_session_id=self.session_id, so the
+                # parent row must exist before any child is built or the child's
+                # insert hits a FOREIGN KEY constraint. Ensure it now.
+                try:
+                    if not getattr(self, "_session_db_created", False):
+                        self._ensure_db_session()
+                except Exception as _exc:  # noqa: BLE001
+                    logger.warning(
+                        "orchestration: could not pre-create parent session row: %s",
+                        _exc,
+                    )
                 routed = maybe_route_task(self, str(user_message), conversation_history)
                 if routed and not routed.get("orchestration_disabled"):
                     return routed
