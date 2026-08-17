@@ -8334,6 +8334,26 @@ class AIAgent:
         moa_config: Optional[dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
+        # Multi-model orchestration prelude (experimental). When orchestration is
+        # enabled AND this is a fresh task turn on a top-level agent (never a
+        # subagent), delegate the whole prompt to the orchestrator. Any failure
+        # degrades to the normal single-model loop, so enabling orchestration
+        # can never break ordinary execution.
+        try:
+            from agent.orchestration import (
+                maybe_route_task,
+                orchestration_should_run,
+            )
+
+            if orchestration_should_run(self, conversation_history):
+                routed = maybe_route_task(self, str(user_message), conversation_history)
+                if routed and not routed.get("orchestration_disabled"):
+                    return routed
+        except Exception as exc:  # noqa: BLE001 - orchestration must never break the turn
+            logger.warning(
+                "orchestration prelude failed, falling back to normal loop: %s",
+                exc,
+            )
         from agent.aux_accounting import (
             reset_accounting_context,
             set_accounting_context,

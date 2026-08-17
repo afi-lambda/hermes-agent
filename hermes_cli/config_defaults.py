@@ -1874,6 +1874,57 @@ DEFAULT_CONFIG = {
         "subagent_auto_approve": False,
     },
 
+    # Multi-model orchestration (experimental, Sol-Advisor-style). Disabled by
+    # default; when disabled Hermes behaves exactly as before. Generic roles
+    # (worker/architect/reviewer) map to arbitrary model/provider pairs so the
+    # strong-vs-cheap model split is config, not code.
+    "orchestration": {
+        "enabled": False,
+        # engine: which implementation to run when enabled.
+        #   "python" — all-Python (prompts coded in agent/orchestration/prompts.py).
+        #   "skill"  — thin Python core + skill file (behavioral guidance and
+        #              prompt templates live in the multi-model-orchestration
+        #              skill; Python only enforces the loop skeleton + metrics).
+        "engine": "python",
+        # routing.mode: heuristic (deterministic keyword/dimension heuristics)
+        # | manual (honor the explicit strategy below for benchmarking).
+        "routing": {
+            "mode": "heuristic",
+        },
+        # Each role resolves provider/model via the same runtime provider
+        # resolution as CLI/gateway startup. Empty model+provider = inherit the
+        # parent agent's model/provider/credentials (same as delegation.model).
+        "models": {
+            "worker": {
+                "model": "",     # e.g. "deepseek-v4-flash"
+                "provider": "",  # e.g. "deepseek" (empty = inherit parent)
+                "reasoning_effort": "high",  # none|minimal|low|medium|high|xhigh|max|ultra
+            },
+            "architect": {
+                "model": "",     # e.g. "glm-5.2"
+                "provider": "",  # e.g. "zai"
+                "reasoning_effort": "",
+            },
+            "reviewer": {
+                "model": "",     # e.g. "glm-5.2"
+                "provider": "",
+                "reasoning_effort": "",
+            },
+        },
+        "review": {
+            "enabled": True,
+            "max_iterations": 2,  # bounded worker<->reviewer revision loop
+        },
+        "escalation": {
+            "enabled": True,
+            "max_worker_failures": 3,
+        },
+        # Manual strategy override for benchmarking (used when routing.mode is
+        # manual): WORKER_SOLO | ARCHITECT_SOLO |
+        # ARCHITECT_PLAN_WORKER_IMPLEMENT_REVIEW | WORKER_IMPLEMENT_REVIEW
+        "strategy": "",
+    },
+
     # Ephemeral prefill messages file — JSON list of {role, content} dicts
     # injected at the start of every API call for few-shot priming.
     # Never saved to sessions, logs, or trajectories.
