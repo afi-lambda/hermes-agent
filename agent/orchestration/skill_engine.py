@@ -512,10 +512,33 @@ def _run_role(
         model=role_cfg["model"] or None,
         provider=role_cfg["provider"] or None,
         reasoning_config=reasoning_config,
+        effort=role_cfg.get("reasoning_effort") or "",
     )
     normalized = _normalize_role_result(child_result, role)
     _record_role_metrics(m, role, normalized)
     return normalized
+
+
+def _role_toolsets(role: str, effort: str) -> Optional[List[str]]:
+    """Return a restricted toolset for a role child, or None to inherit parent.
+
+    The worker child otherwise inherits the parent's full toolset and the
+    default agent loop, which drives broad repo exploration (search_files,
+    session_search, long terminal commands) even for trivial tasks. Restricting
+    the toolset by role+effort keeps cheap tasks cheap and fast.
+
+    - worker low: file only (read/write/patch/search) — no terminal, no web,
+      no session_search. Enough for formatting / one-line edits / renames.
+    - worker high/max: file + terminal (needed for tests, builds, debugging).
+    - architect / reviewer: file + terminal (they inspect the repo and may run
+      tests to verify).
+    """
+    if role == "worker":
+        if effort in ("low", "minimal", "none"):
+            return ["file"]
+        return ["file", "terminal"]
+    # architect / reviewer
+    return ["file", "terminal"]
 
 
 def _build_and_run_child(
@@ -526,6 +549,7 @@ def _build_and_run_child(
     model: Optional[str],
     provider: Optional[str],
     reasoning_config: Optional[Dict[str, Any]],
+    effort: str = "",
 ) -> Dict[str, Any]:
     """Build and run one role child via the existing delegate_tool primitive.
 
@@ -577,12 +601,17 @@ def _build_and_run_child(
             }
 
     max_iterations = int(cfg.get("max_iterations") or 250)
+    # Restrict the child's toolset by role+effort so cheap tasks don't trigger
+    # broad repo exploration, and cap iterations tighter for low-effort work.
+    toolsets = _role_toolsets(role, effort)
+    if effort in ("low", "minimal", "none"):
+        max_iterations = min(max_iterations, 8)
     try:
         child = _build_child_preserving_parent_tools(
             task_index=0,
             goal=goal,
             context=None,
-            toolsets=None,
+            toolsets=toolsets,
             model=effective_model,
             max_iterations=max_iterations,
             task_count=1,

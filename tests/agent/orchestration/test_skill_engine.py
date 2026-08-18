@@ -210,6 +210,16 @@ class TestSkillEngineFlows(unittest.TestCase):
         self.assertIn("orchestration failed", result["final_response"])
         self.assertIn("orchestration", result)
 
+    def test_low_effort_worker_gets_restricted_toolset(self):
+        from agent.orchestration.skill_engine import _role_toolsets
+
+        self.assertEqual(_role_toolsets("worker", "low"), ["file"])
+        self.assertEqual(_role_toolsets("worker", "minimal"), ["file"])
+        self.assertEqual(_role_toolsets("worker", "high"), ["file", "terminal"])
+        self.assertEqual(_role_toolsets("worker", "max"), ["file", "terminal"])
+        self.assertEqual(_role_toolsets("architect", "high"), ["file", "terminal"])
+        self.assertEqual(_role_toolsets("reviewer", "high"), ["file", "terminal"])
+
 
 class TestVerdictParsing(unittest.TestCase):
     def test_parse_accept(self):
